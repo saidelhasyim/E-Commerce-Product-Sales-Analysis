@@ -1,0 +1,158 @@
+-- Selama transaksi yang terjadi selama 2021, pada bulan apa total nilai transaksi(after_discount) paling besar? Gunakan is_valid = 1 untuk memfilter data transaksi.
+
+select extract(month from order_date) as bulan, after_discount from `Finpro_SQL.order_detail`
+where extract(year from order_date) = 2021 and is_valid = 1 
+order by 2 desc
+limit 1
+
+-- Selama transaksi pada tahun 2022, kategori apa yang menghasilkan nilai transaksi -- paling besar? Gunakan is_valid = 1 untuk memfilter data transaksi.
+
+select s.category, sum(o.after_discount)
+from `Finpro_SQL.order_detail` as o
+join 
+`Finpro_SQL.sku_detail` as s 
+on 
+o.sku_id = s.id
+where o.is_valid = 1 and extract(year from o.order_date) = 2022
+group by 1
+order by 2 desc
+limit 1
+
+-- Bandingkan nilai transaksi dari masing-masing kategori pada tahun 2021 dengan 2022. Sebutkan kategori apa saja yang mengalami peningkatan dan kategori apa yang mengalami penurunan nilai transaksi dari tahun 2021 ke 2022. Gunakan is_valid = 1 untuk memfilter data transaksi.
+-- jawaban part 1 dengan CTE
+
+WITH yearly_transaction AS (
+    SELECT
+        s.category,
+        EXTRACT(YEAR FROM o.order_date) AS tahun,
+        SUM(o.after_discount) AS total_sales
+    FROM
+        `Finpro_SQL.order_detail` AS o
+        INNER JOIN `Finpro_SQL.sku_detail` AS s ON o.sku_id = s.id
+    WHERE
+        o.is_valid = 1 AND EXTRACT(YEAR FROM o.order_date) IN (2021, 2022)
+    GROUP BY s.category, tahun
+)
+SELECT
+    yt21.category,
+    yt21.total_sales AS total_sales_2021,
+    yt22.total_sales AS total_sales_2022,
+    ROUND(yt22.total_sales - yt21.total_sales) AS selisih,
+    CASE
+        WHEN yt22.total_sales > yt21.total_sales THEN 'peningkatan'
+        WHEN yt22.total_sales < yt21.total_sales THEN 'penurunan'
+        ELSE 'tetap'
+    END AS perubahan
+FROM
+    (SELECT * FROM yearly_transaction WHERE tahun = 2021) yt21
+    INNER JOIN (SELECT * FROM yearly_transaction WHERE tahun = 2022) yt22 ON yt21.category = yt22.category
+ORDER BY
+    selisih DESC;
+
+-- jawaban part 2 subqueries
+
+SELECT
+  s.category,
+  SUM(CASE WHEN EXTRACT(YEAR FROM o.order_date) = 2022 THEN o.after_discount ELSE 0 END) -
+  SUM(CASE WHEN EXTRACT(YEAR FROM o.order_date) = 2021 THEN o.after_discount ELSE 0 END) AS perbandingan,
+  CASE
+    WHEN SUM(CASE WHEN EXTRACT(YEAR FROM o.order_date) = 2022 THEN o.after_discount ELSE 0 END) > SUM(CASE WHEN EXTRACT(YEAR FROM o.order_date) = 2021 THEN o.after_discount ELSE 0 END) THEN 'kenaikan'
+    WHEN SUM(CASE WHEN EXTRACT(YEAR FROM o.order_date) = 2022 THEN o.after_discount ELSE 0 END) < SUM(CASE WHEN EXTRACT(YEAR FROM o.order_date) = 2021 THEN o.after_discount ELSE 0 END) THEN 'penurunan'
+    ELSE 'tetap'
+    END AS status
+FROM
+`Finpro_SQL.order_detail` AS o JOIN `Finpro_SQL.sku_detail` AS s ON o.sku_id = s.id
+WHERE o.is_valid = 1 AND EXTRACT(YEAR FROM o.order_date) IN (2021, 2022)
+GROUP BY s.category
+ORDER BY perbandingan DESC
+
+-- Urutkan dari ke-5 produk ini berdasarkan nilai transaksinya.
+--1. Samsung
+--2. Apple
+--3. Sony
+--4. Huawei
+--5. Lenovo
+--Gunakan is_valid = 1 untuk memfilter data transaksi.
+
+(POSTGRE ANSWER)
+# identify category
+SELECT 
+    category,
+    SUM(CASE WHEN sku_name ILIKE '%Samsung%' THEN 1 ELSE 0 END) AS samsung_count,
+    SUM(CASE WHEN sku_name ILIKE '%Apple%' THEN 1 ELSE 0 END) AS apple_count,
+    SUM(CASE WHEN sku_name ILIKE '%Sony%' THEN 1 ELSE 0 END) AS sony_count,
+    SUM(CASE WHEN sku_name ILIKE '%Huawei%' THEN 1 ELSE 0 END) AS huawei_count,
+    SUM(CASE WHEN sku_name ILIKE '%Lenovo%' THEN 1 ELSE 0 END) AS lenovo_count
+FROM sku_detail
+GROUP BY category
+ORDER BY category;
+
+#main code
+with brand_name as (
+  SELECT 
+    CASE 
+        WHEN s.sku_name ILIKE ANY (ARRAY['%Samsung%', '%Galaxy%']) THEN 'Samsung'
+        WHEN s.sku_name ILIKE ANY (ARRAY['%Apple%', '%iPhone%', '%iMac%', '%MacBook%', '%Ipad%', '%Homepod%', '%Mac Mini%']) THEN 'Apple'
+        WHEN s.sku_name ILIKE ANY (ARRAY['%Sony%', '%Playstation%', '%PS4%']) THEN 'Sony'
+        WHEN s.sku_name ILIKE any (array['%Huawei%', '%Matepad%']) THEN 'Huawei'
+        WHEN s.sku_name ILIKE ANY (ARRAY['%Lenovo%', '%Zuk%']) THEN 'Lenovo'
+    END AS brand,
+    SUM(o.after_discount) AS total_transaksi
+  FROM order_detail o
+  JOIN sku_detail s ON o.sku_id = s.id
+  WHERE o.is_valid = 1
+  Group by 1
+  Order by 2 desc
+)
+Select * 
+from brand_name b
+Where b.brand is not null
+
+(BIGQUERY ANSWER)
+# identify category
+SELECT 
+  category,
+  SUM(
+    CASE 
+     WHEN UPPER(sku_name) LIKE '%SAMSUNG%' THEN 1 ELSE 0 
+    END) AS samsung_count,
+  SUM(
+    CASE 
+     WHEN UPPER(sku_name) LIKE '%APPLE%' THEN 1 ELSE 0 
+    END) AS apple_count,
+  SUM(
+    CASE 
+     WHEN UPPER(sku_name) LIKE '%SONY%' THEN 1 ELSE 0 
+    END) AS sony_count,
+  SUM(
+    CASE 
+     WHEN UPPER(sku_name) LIKE '%HUAWEI%' THEN 1 ELSE 0 
+    END) AS huawei_count,
+  SUM(
+    CASE 
+     WHEN UPPER(sku_name) LIKE '%LENOVO%' THEN 1 ELSE 0 
+    END) AS lenovo_count
+FROM `Finpro_SQL.sku_detail`
+GROUP BY category
+ORDER BY category;
+
+# main code
+SELECT
+  CASE
+    WHEN REGEXP_CONTAINS(LOWER(s.sku_name), 'samsung|galaxy') THEN 'Samsung'
+    WHEN REGEXP_CONTAINS(LOWER(s.sku_name), 'apple|iphone|imac|macbook|ipad|homepod|mac mini') THEN 'Apple'
+    WHEN REGEXP_CONTAINS(LOWER(s.sku_name), 'sony|playstation|ps4') THEN 'Sony'
+    WHEN REGEXP_CONTAINS(LOWER(s.sku_name), 'huawei|matepad') THEN 'Huawei'
+    WHEN REGEXP_CONTAINS(LOWER(s.sku_name), 'lenovo|zuk') THEN 'Lenovo'
+    ELSE 'Other'
+  END AS brand,
+  SUM(o.after_discount) AS total_transaksi
+FROM
+  `Finpro_SQL.order_detail` AS o
+  INNER JOIN
+  `Finpro_SQL.sku_detail` AS s
+  ON o.sku_id = s.id
+WHERE
+  o.is_valid = 1
+GROUP BY 1
+ORDER BY total_transaksi DESC;
